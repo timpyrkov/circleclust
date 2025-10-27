@@ -1,21 +1,37 @@
 from setuptools import setup, find_packages
 
+# Read the contents of README file
+from pathlib import Path
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text(encoding='utf-8')
+
 setup(
     name="circleclust",
     version="0.0.1",
-    author="tim.pyrkov@gmail.com",
+    author="Tim Pyrkov",
+    author_email="tim.pyrkov@gmail.com",
     description="Clustering on periodic circular coordinates.",
-    long_description=read("README.md"),
-    license = "MIT License",
+    long_description=long_description,
+    license = "MIT",
     long_description_content_type="text/markdown",
     url="https://github.com/timpyrkov/circleclust",
     packages=find_packages(exclude=("tests", "tests.*")),
     include_package_data=True,
     python_requires=">=3.8",
     classifiers=[
-        "Programming Language :: Python :: 3",
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Science/Research",
+        "Intended Audience :: Developers",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Scientific/Engineering :: Information Analysis",
         "License :: OSI Approved :: MIT License",
-        "Topic :: Artistic Software",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Operating System :: OS Independent",
     ],
     install_requires=[
         "numpy>=1.20",
