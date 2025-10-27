@@ -19,11 +19,11 @@ pip install circleclust
 
 # Why CircleClust?
 
-Standard clustering algorithms don't account for periodicity - values near boundaries wrap around. CircleClust handles this by detecting clusters that cross periodic boundaries.
+Standard clustering algorithms don't account for periodicity. Values like color hues on a color wheel or bedtimes may wrap around boundaries. CircleClust handles this by correctly detecting clusters that cross periodic boundaries.
 
 # Features
 
-- **Automatic window size detection** using train/test RMSD minimization
+- **Automatic size parameter detection** using train/test RMSD minimization
 - **Circular boundary handling** - clusters crossing 0/period are correctly identified
 - **Period-aware clustering** - works with any period (radians, degrees, hours, minutes)
 - **Visualization tools** - plot centroids means and stds
