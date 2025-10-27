@@ -1,4 +1,4 @@
-.. image:: img/caption2.png
+.. image:: img/caption_dark.png
    :alt: CircleClust Logo
    :align: center
    :width: 100%
