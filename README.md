@@ -5,7 +5,7 @@
 
 
 <h1><p align="left">
-  <img src="docs/img/logo.png" alt="CircleClust logo" height="40" style="vertical-align: middle; margin-right: 10px;">
+  <img src="https://github.com/timpyrkov/circleclust/blob/master/docs/img/logo.png?raw=true" alt="CircleClust logo" height="40" style="vertical-align: middle; margin-right: 10px;">
   <span style="font-size:2.5em; vertical-align: middle;"><b>CircleClust</b></span>
 </p></h1>
 
