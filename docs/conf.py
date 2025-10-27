@@ -61,16 +61,8 @@ autodoc_typehints = 'description'
 autodoc_typehints_format = 'short'
 autodoc_preserve_defaults = True
 
-# On RTD, the package will be installed; for safety we can mock heavy libs
-autodoc_mock_imports = [
-    'matplotlib',
-    'numpy',
-    'pandas',
-    'PIL',
-    'requests',
-    'scipy',
-
-]
+# Mock imports removed - packages are now installed in RTD
+autodoc_mock_imports = []
 
 # MyST configuration
 myst_enable_extensions = [

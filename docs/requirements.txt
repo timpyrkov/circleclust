@@ -8,3 +8,4 @@ pandas
 matplotlib
 Pillow
 scipy
+kneed>=0.8.2

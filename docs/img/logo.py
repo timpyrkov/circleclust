@@ -37,7 +37,8 @@ def draw_logo(size_px: int = 512, dpi: int = 72, cmap_name: str = "YlGnBu", outp
     cmap = plt.colormaps.get_cmap(cmap_name)
     color_positions = np.linspace(0.15, 0.85, len(peaks))
     color = [cmap(p) for p in color_positions][::-1]
-    color = ['#CCFF66', '#6BB0DE', '#2980BA']
+    color = ['#CCFF66', '#6BB0DE', '#2980BA', 'white']
+    #color = ['#CC241D', '#D79921', '#689D6A', '#FBF1C7']
 
     # Create figure
     fig = plt.figure(figsize=figsize, dpi=dpi, facecolor='#00000000')
@@ -65,7 +66,7 @@ def draw_logo(size_px: int = 512, dpi: int = 72, cmap_name: str = "YlGnBu", outp
         r = r0 + 0.12 * (n - i) + amp * profile
         x = r * np.cos(theta)
         y = r * np.sin(theta)
-        ax.plot(x, y, color='white', linewidth=linewidth, solid_capstyle='round')
+        ax.plot(x, y, color=color[3], linewidth=linewidth, solid_capstyle='round')
 
     # Fill inner area (solid white) inside each "peak"
     for i, peak in enumerate(peaks):
@@ -79,7 +80,7 @@ def draw_logo(size_px: int = 512, dpi: int = 72, cmap_name: str = "YlGnBu", outp
         # Create a polygon that fills from center to the profile
         x_fill = np.concatenate([[0], x])
         y_fill = np.concatenate([[0], y])
-        ax.fill(x_fill, y_fill, color='white', zorder=1)
+        ax.fill(x_fill, y_fill, color=color[3], zorder=1)
 
     # Draw peaks
     n = len(peaks)
