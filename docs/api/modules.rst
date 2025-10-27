@@ -1,11 +1,14 @@
 API Reference
 =============
 
-CircleClust
------------
+.. py:module:: circleclust
 
-.. automodule:: circleclust.circleclust
+CircleClust Class
+-----------------
+
+.. autoclass:: circleclust.CircleClust
    :members:
-   :imported-members:
-   :undoc-members:
+   :no-inherited-members:
    :show-inheritance:
+   
+This is the main class for circular clustering with automatic peak detection and boundary handling.
