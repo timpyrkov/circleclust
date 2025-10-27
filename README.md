@@ -21,104 +21,101 @@ pip install circleclust
 
 Standard clustering algorithms don't account for periodicity - values near boundaries wrap around. CircleClust handles this by detecting clusters that cross periodic boundaries.
 
-## Use Case 1: Image Color Hues
-
-Cluster color hues from an image. Red hues near 0°/360° boundary require circular distance metrics.
-
-```python
-from circleclust import CircleClust
-import numpy as np
-
-# Load color hues from an image
-hues = np.array([350, 355, 358, 2, 5, 180, 185, 190])  # Red cluster at boundary
-clust = CircleClust(data=hues, period=360, verbose=True)
-clust.fit(hues, period=360)
-labels = clust.predict(hues)
-
-# Visualize
-clust.show_peaks(output="hist_hues.png")
-```
-
-![Histogram of Color Hues](examples/hist_hues.png)
-
-## Use Case 2: Go-to-Sleep Times
-
-Cluster sleep onset times near midnight boundary.
-
-```python
-# Load sleep data (times in minutes past midnight)
-sleep_times = [23*60+45, 23*60+50, 23*60+55, 0, 5, 10]  # Midnight boundary
-
-clust = CircleClust(data=sleep_times, period=24*60, verbose=True)
-clust.fit(sleep_times, period=24*60)
-labels = clust.predict(sleep_times)
-
-# Visualize
-clust.show_peaks(output="hist_sleep.png")
-```
-
-![Histogram of Go-to-Sleep Times](examples/hist_sleep.png)
-
 # Features
 
 - **Automatic window size detection** using train/test RMSD minimization
 - **Circular boundary handling** - clusters crossing 0/period are correctly identified
 - **Period-aware clustering** - works with any period (radians, degrees, hours, minutes)
-- **Visualization tools** - plot peaks, centroids, and clusters
+- **Visualization tools** - plot centroids means and stds
 - **Robust peak detection** - identifies distribution peaks on periodic axes
 
 # Quick Start
 
 ```python
-from circleclust import CircleClust
 import numpy as np
+import pandas as pd
+from circleclust import CircleClust
 
-# Example: cluster angles in radians
-angles = np.array([0.1, 0.2, 0.3, 5.9, 6.0, 3.1, 3.2])
+url = "https://raw.githubusercontent.com/timpyrkov/circleclust/refs/heads/master/tests/sample.csv"
+
+# Read sample data csv: 500 data points in range [0, 2π)
+df = pd.read_csv(url)
+data = df['x'].values
 
 # Create and fit model
 clust = CircleClust(verbose=True)
-clust.fit(angles, period=2*np.pi)
+clust.fit(data, period=2*np.pi)
+
+# Get detected centroids
+clust.get_centroids()
+# Output: {'centroid': array([0.46530696, 3.1074802 , 4.34047566]),
+#          'std': array([0.66322512, 0.2304881 , 0.29800344])}
 
 # Predict cluster labels
-labels = clust.predict(angles)
+labels = clust.predict(data)
+np.unique(labels, return_counts=True)
+# Output: (array([-1,  0,  1,  2]), array([179, 150,  81,  90]))
 
 # Visualize results
 clust.show_peaks(output="clusters.png")
 ```
 
+![Detected Clusters](https://github.com/timpyrkov/circleclust/blob/master/docs/img/clsuters.png?raw=true)
+
+# Examples
+
+## Color Hue Clustering
+
+Cluster pixel hues from an image, correctly handling the red color boundary:
+
+**Notebook:** [Color Wheel Example](https://circleclust.readthedocs.io/en/latest/notebooks/colorwheel.html)
+
+This example demonstrates how CircleClust correctly identifies red clusters that span the 0°/360° boundary, treating pixels near both boundaries as a single cluster.
+
+## Sleep Pattern Analysis
+
+Analyze go-to-sleep and wake-up times near midnight:
+
+**Notebook:** [Sleep-Wake Pattern Example](https://circleclust.readthedocs.io/en/latest/notebooks/sleepwake.html)
+
+This example shows how to detect sleep patterns that cross the day boundary at midnight, properly clustering late-night and early-morning bedtimes.
+
+
+
+
 # API Reference
 
-## CircleClust
+## CircleClust Class
 
-Main class for circular clustering.
+Main class for circular clustering with automatic peak detection.
 
-### Parameters
+### Constructor Parameters
 
 - `data` (Iterable[float], optional): Data to fit immediately upon construction
 - `period` (float, default 2π): Period of input values; data is wrapped into [0, period)
 - `window` (float, optional): Manual override for smoothing window width
-- `max_screen_divisor` (int, default 32): Maximum divisor k in window screening
+- `max_screen_divisor` (int, default 32): Maximum divisor k in window screening  
 - `max_screen_iter` (int, default 2): Number of screening repetitions
 - `train_frac` (float, default 0.7): Training fraction during screening
 - `random_seed` (int, default 0): Random seed for reproducibility
 - `verbose` (bool, default False): Enable informational prints
 
-### Methods
+### Main Methods
 
-- `fit(data, period=None)`: Fit the model to data
-- `predict(x)`: Predict cluster labels for input values
-- `show_peaks(color, title, output)`: Visualize detected peaks
-- `show_centroids(output)`: Show centroids
-- `show_clusters(output)`: Show clusters
+- **`fit(data, period=None)`**: Fit the model to data. *Important: provide correct period range for data values!*
+- **`predict(data)`**: Predict cluster labels for input data points (returns array of integers, -1 for outliers)
+- **`get_centroids()`**: Get detected centroids as a dict with 'centroid' (means) and 'std' (standard deviations) arrays
+- **`show_peaks(output=None)`**: Visualize detected peaks on a histogram plot
+- **`show_centroids(output=None)`**: Alias for show_peaks()
 
-### Attributes
+### Usage Tips
 
-- `centroid_`: Array of detected cluster centers
-- `centroid_radius_`: Array of cluster radii (2-sigma)
-- `peak_idx_`: Indices of peaks in histogram
-- `peak_sigma_`: Widths of detected peaks
+1. **Provide the correct period**: Your data must be within [0, period). Make sure your period matches your data domain (e.g., `2*np.pi` for radians, `360` for degrees, `24*60` for minutes in a day)
+
+2. **Let the algorithm find the optimal window**: Unless you have domain knowledge, let CircleClust automatically detect the optimal smoothing window
+
+3. **Check for outliers**: Points labeled `-1` in the predict output are outliers not assigned to any cluster
 
 # Documentation
 
-[https://circleclust.readthedocs.io](https://circleclust.readthedocs.io)
+Comprehensive documentation with interactive examples: **[https://circleclust.readthedocs.io](https://circleclust.readthedocs.io)**

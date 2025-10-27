@@ -70,9 +70,9 @@ class CircleClust:
 
         self.bins_per_window_ = 9
         self.peak_idx_ = None
-        self.peak_sigma_ = None
+        self.peak_std_ = None
         self.centroid_ = None
-        self.centroid_radius_ = None
+        self.centroid_std_ = None
         self.h_all_ = None
         self.s_all_ = None
 
@@ -280,7 +280,7 @@ class CircleClust:
         return self.window_optimal
 
 
-    def fit(self, data: Iterable[float], period: float | None = None):
+    def fit(self, data: Iterable[float], period: float | None = None, verbose: bool | None = None):
         """
         Fits the model by selecting smoothing binning and finding centers.
 
@@ -295,14 +295,20 @@ class CircleClust:
             - 24 if your data is measured in hours (e.g. times of day)
             - 360 if your data is measured in degrees
             - 2π if your data is measured in radians (e.g. angles)
+        verbose : bool | None, default None
+            Whether to print verbose output. If None, uses self.verbose.
         
         Returns
         -------
         self : CircleClust
-            The fitted instance with detected peak_idx, peak_sigma, centroid and centroid_radius arrays.
+            The fitted instance with detected peak_idx, peak_std, centroid and centroid_std arrays.
         """
         # Set period
         self._set_period(period)
+        
+        # Set verbose
+        if verbose is not None:
+            self.verbose = verbose
         
         # Check if data are within the period range
         x = np.asarray(list(data), dtype=float)
@@ -332,16 +338,16 @@ class CircleClust:
         self.peak_idx_ = _find_idxs_of_periodic_peaks(self.s_all_, self.bins_per_window_)
         self.centroid_ = self.peak_idx_ * self.period / nbins
 
-        # Move to determine peak sigma and centroid radius
+        # Move to determine peak std and centroid std
 
         # Compute periodic midpoints between adjacent peaks to define disjoint segments
         nbins = len(self.h_all_)
         self.peak_midpoints_ = _find_idxs_of_midpoints_between_peaks(self.peak_idx_, nbins)
 
-        # Fit Gaussian per peak to estimate sigma/width using only its segment
+        # Fit Gaussian per peak to estimate std (width) using only its segment
         means: list[float] = []
         centroids: list[float] = []
-        sigmas: list[float] = []
+        stds: list[float] = []
         amplitudes: list[float] = []
         baselines: list[float] = []
         for k, peak_id in enumerate(self.peak_idx_):
@@ -349,52 +355,52 @@ class CircleClust:
             right_b = int(self.peak_midpoints_[k])
             # Build segment values from smoothed signal and compute center index within the segment
             curve_segment = _slice_periodic_segment(self.s_all_, left_b, right_b)
-            sigma = 0.0
+            std = 0.0
             mean = np.mod(peak_id - left_b, nbins)
             centroid = self.centroid_[k]
-            sigma = len(curve_segment) / 6
+            std = len(curve_segment) / 6
             baseline = np.mean(curve_segment)
             amplitude = np.max(curve_segment) - baseline
             if len(curve_segment) >= 2:
                 popt = fit_gaussian_shifted(curve_segment)
                 popt_ = fit_gaussian_shifted(curve_segment, mu=mean)
                 if popt is not None and abs(popt[1] - mean) <= 1:
-                    amplitude, mean, sigma, baseline = popt
+                    amplitude, mean, std, baseline = popt
                 elif popt_ is not None:
-                    amplitude, mean, sigma, baseline = popt_
+                    amplitude, mean, std, baseline = popt_
             mean = np.mod(mean + left_b, nbins)
             centroid = mean * self.period / nbins
             means.append(int(mean))
             centroids.append(float(centroid))
-            sigma = min(sigma, len(curve_segment) / 4)
-            sigmas.append(float(sigma))
+            std = min(std, len(curve_segment) / 4)
+            stds.append(float(std))
             amplitudes.append(float(amplitude))
             baselines.append(float(baseline))
 
         # Filter out peaks with too small amplitude (likely coming from noise)
         means = np.asarray(means, dtype=int)
         centroids = np.asarray(centroids, dtype=float)
-        sigmas = np.asarray(sigmas, dtype=float)
+        stds = np.asarray(stds, dtype=float)
         amplitudes = np.asarray(amplitudes, dtype=float)
         baselines = np.asarray(baselines, dtype=float)
         mask = amplitudes > baselines
         self.peak_idx_ = means[mask]
         self.centroid_ = centroids[mask]
-        self.peak_sigma_ = sigmas[mask]
-        self.centroid_radius_ = 2.0 * self.peak_sigma_ * (self.period / nbins)
+        self.peak_std_ = stds[mask]
+        self.centroid_std_ = self.peak_std_ * (self.period / nbins)
 
         if self.verbose:
             print()
             print("Identified peaks:")
-            print("idx | centroid | radius")
+            print("idx | mean     | std")
             for i in range(len(self.centroid_)):
-                print(f"{i:3d} | {self.centroid_[i]:.4f} | {self.centroid_radius_[i]:.4f}")
+                print(f"{i:3d} | {self.centroid_[i]:8.3f} | {self.centroid_std_[i]:8.3f}")
             print()
 
         return self
 
 
-    def predict(self, x: Iterable[float]):
+    def predict(self, x: Iterable[float], width_scale: float = 1.0):
         """
         Predicts cluster labels by nearest circular distance to centers.
 
@@ -403,6 +409,9 @@ class CircleClust:
         x : Iterable[float]
             Input values (wrapped to [0, range)). Units must match `range` used
             during fitting (e.g., radians, minutes, or fraction of circle).
+        width_scale : float, default 1.0
+            Multiplies the peak width (std) to define the distance threshold for
+            assignment.
 
         Returns
         -------
@@ -410,21 +419,30 @@ class CircleClust:
             Integer labels in [0, n_centers-1], or -1 for outliers.
         """
         # Check if model is fitted
-        if self.centroid_ is None or self.centroid_radius_ is None:
+        if self.centroid_ is None or self.centroid_std_ is None:
             raise RuntimeError("CircleClust is not fitted.")
         centroid_array = np.asarray(self.centroid_, dtype=float)
-        radius_array = np.asarray(self.centroid_radius_, dtype=float)
-        # Initialize all points as outliers and return if no centroids
-        labels = np.full(x.shape[0], -1, dtype=int)
+        std_array = np.asarray(self.centroid_std_, dtype=float)
+        # Convert inputs
+        x_ = np.asarray(x, dtype=float)
+        n = x_.shape[0]
+        # Initialize all points as outliers and return if no centroids found
+        labels = np.full(n, -1, dtype=int)
         if centroid_array.size == 0:
             return labels
-        # For each centroid, assign all points within 2*sigma to that centroid id
-        x_ = np.asarray(x, dtype=float)
-        for i, centroid in enumerate(centroid_array):
-            diff = np.abs(x_ - centroid)
-            diff = np.minimum(diff, self.period - diff)
-            mask = diff <= radius_array[i]
-            labels[mask] = i
+        # Compute circular distances to each centroid: shape (n_points, n_centroids)
+        diffs = np.abs(x_[:, None] - centroid_array[None, :])
+        diffs = np.minimum(diffs, self.period - diffs)
+        # Valid assignments are only those within each centroid's std * width_scale
+        valid = diffs <= std_array[None, :] * width_scale
+        # Replace invalid distances with +inf so argmin chooses only valid ones
+        dist_masked = np.where(valid, diffs, np.inf)
+        # Nearest valid centroid per point
+        nearest = np.argmin(dist_masked, axis=1)
+        nearest_dist = dist_masked[np.arange(n), nearest]
+        # Assign where there exists at least one valid centroid (finite distance)
+        assignable = np.isfinite(nearest_dist)
+        labels[assignable] = nearest[assignable]
         return labels
 
 
@@ -435,21 +453,21 @@ class CircleClust:
         Parameters
         ----------
         as_list : bool, default False
-            If True, returns a list of dicts [{'centroid': c, 'radius': r}, ...].
-            If False, returns a dict with numpy arrays {'centroid': array, 'radius': array}.
+            If True, returns a list of dicts [{'centroid': c, 'std': s}, ...].
+            If False, returns a dict with numpy arrays {'centroid': array, 'std': array}.
 
         Returns
         -------
         dict | list
             Peaks information as a dict of arrays or a list of per-peak dicts.
         """
-        if getattr(self, "centroid_", None) is None or getattr(self, "centroid_radius_", None) is None:
+        if getattr(self, "centroid_", None) is None or getattr(self, "centroid_std_", None) is None:
             raise RuntimeError("CircleClust is not fitted.")
         centroids = np.asarray(self.centroid_, dtype=float)
-        radii = np.asarray(self.centroid_radius_, dtype=float)
+        stds = np.asarray(self.centroid_std_, dtype=float)
         if as_list:
-            return [{"centroid": float(c), "radius": float(r)} for c, r in zip(centroids, radii)]
-        return {"centroid": centroids, "radius": radii}
+            return [{"centroid": float(c), "std": float(s)} for c, s in zip(centroids, stds)]
+        return {"centroid": centroids, "std": stds}
 
 
     def get_centroids(self, as_list: bool = False):
@@ -459,8 +477,8 @@ class CircleClust:
         Parameters
         ----------
         as_list : bool, default False
-            If True, returns a list of dicts [{'centroid': c, 'radius': r}, ...].
-            If False, returns a dict with numpy arrays {'centroid': array, 'radius': array}.
+            If True, returns a list of dicts [{'centroid': c, 'std': s}, ...].
+            If False, returns a dict with numpy arrays {'centroid': array, 'std': array}.
 
         Returns
         -------
@@ -478,8 +496,8 @@ class CircleClust:
         Parameters
         ----------
         as_list : bool, default False
-            If True, returns a list of dicts [{'centroid': c, 'radius': r}, ...].
-            If False, returns a dict with numpy arrays {'centroid': array, 'radius': array}.
+            If True, returns a list of dicts [{'centroid': c, 'std': s}, ...].
+            If False, returns a dict with numpy arrays {'centroid': array, 'std': array}.
 
         Returns
         -------
@@ -520,14 +538,14 @@ class CircleClust:
             ix = self.peak_idx_
             py = s[ix] + 0.1 * h.max()
             plt.scatter(px, py, marker='*', s=200, color=color, zorder=4)
-        # Add +/- sigma whiskers for each peak by filling a NaN array between i0..i1 (with wrap)
-        if getattr(self, "peak_sigma_", None) is not None and self.peak_sigma_.size:
+        # Add +/- std whiskers for each peak by filling a NaN array between i0..i1 (with wrap)
+        if getattr(self, "peak_std_", None) is not None and self.peak_std_.size:
             lw = 2.0
             wy = py - 0.05 * h.max()
-            y_cap = 0.2
+            y_cap = 0.01 * h.max()
             for i, c in enumerate(px):
-                x0 = c - 2 * self.peak_sigma_[i]
-                x1 = c + 2 * self.peak_sigma_[i]
+                x0 = c - self.peak_std_[i]
+                x1 = c + self.peak_std_[i]
                 _draw_horizontal_whisker(x0, x1, wy[i], y_cap=y_cap, linewidth=lw, color=color)
                 if x0 < 0:
                     _draw_horizontal_whisker(x0 + n, x1 + n, wy[i], y_cap=y_cap, linewidth=lw, color=color)
